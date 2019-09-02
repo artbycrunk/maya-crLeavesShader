@@ -1,0 +1,133 @@
+/* ******************************* 
+******************************* 
+
+Leave Shader 1.1
+
+Created On October 13th 2008
+Authored By - Crunk AKA Savio Fernandes
+
+Install & Execute:
+-Copy this file to your maya default script directory
+-Source "crLeavesShader.mel"
+
+******************************* 
+********************************** */
+source AEfileTemplate.mel;
+
+global proc crLeavesShader()
+{
+	if (`window -q -ex crLSWin`) deleteUI crLSWin; 
+	window -title "crLeavesShader 1.1" -wh 259 199 -s 1 crLSWin ;
+
+	columnLayout -adjustableColumn true;
+	separator;separator;
+	string $name_field = `textFieldGrp -l "Shader Name:" -cw2 86 160 name_field`;
+	separator;separator;
+	string $bright_col = `colorSliderGrp -label "Dark Color" -cw3 86 50 110 -cal 1 "left"-rgb 0.00 0.51 0.051 BrightCol`;
+	string $dark_col = `colorSliderGrp -label "Bright Color" -cw3 86 50 110 -cal 1 "left"-rgb 1.00 0.76 0.26 DarkCol`;
+	separator;separator;
+	rowColumnLayout -nc 3 -cw 1 60 -cw 2 140 -cw 3 50 MainRow;
+	text -l "Leaves Tex" path_text;
+	$path_texfield =`textField -w 150 path_texfield`;
+	string $path_browser=`button -l "Browse" -w 30 -c("crSetpath") ptah_browser`;
+	setParent.. ;
+	separator;
+	string $shader_make =`button -l "Create Shader" -h 40 -c("crCompileShader") but_smake`;
+	string $about =`button -l "Usage/About" -w 60 -h 20 -c("crAboutLSWin") but_about`;
+	setParent ..; 
+	window -e -wh 259 199 crLSWin ;
+	showWindow crLSWin;
+}
+
+global proc crSetpath()
+{
+	string $tex_filename = `fileDialog -dm ("*.jpg"+";"+"*.tga"+";"+"*.tif"+";"+"*.png"+"*.gif"+"*.tiff")`;
+	textField  -e -tx $tex_filename path_texfield;
+}
+
+
+global proc crCompileShader()
+{
+
+	//Hold the users selection
+	string $selObjects[] = `ls -sl`;
+	$shaderName = `textFieldGrp -q -text name_field`;
+	$fileImage = `textField -q -text path_texfield`;
+	if ($selObjects[0] != ""){
+		if ($shaderName != ""){
+			if ($fileImage != ""){
+
+
+	//Make the Phong Base Shader
+	$shader = `createNode phong -n $shaderName`;
+	$shaderSG = `sets -renderable true -noSurfaceShader true -empty -name ($shader +"SG")`;
+	connectAttr -f ($shader +".outColor")($shaderSG + ".surfaceShader");
+
+	//Change the Values of the Phong Shader
+	setAttr ($shader+".diffuse") 0.51200;
+	setAttr ($shader+".translucence") 0.488;
+	setAttr ($shader+".translucenceDepth") 1;
+	setAttr ($shader+".translucenceFocus") 0;
+	setAttr ($shader+".cosinePower") 5.124;
+
+	//Create the File Node
+	$fileNode = `createNode file`;
+	////$fileImage = "C:/Program Files/Autodesk/Maya2008/brushImages/oakLeaf.tif";
+	connectAttr -f ($fileNode+".outColor") ($shader+".color");
+	connectAttr -f ($fileNode+".outTransparency") ($shader+".transparency");
+	eval("AEassignTextureCB" + " " + $fileNode + ".fileTextureName" + " " + "\"" + $fileImage + "\"" + " " + "\""+"image" + "\"" + ";"); //"
+
+	//Create the Reverse and MultiDiv for Specular
+	$reverse = `createNode reverse`;
+	$mulDivide = `createNode multiplyDivide`;
+	connectAttr -f ($fileNode +".outTransparency")($reverse + ".input");
+	connectAttr -f ($reverse +".output")($mulDivide + ".input2");
+	connectAttr -f ($mulDivide +".output")($shader + ".specularColor");
+
+	//Set Attributes for the MultiDivide
+	float $input1Val[] = {0.149,0.130,0.121};
+	setAttr ($mulDivide + ".input1X") $input1Val[0];
+	setAttr ($mulDivide + ".input1Y") $input1Val[1];
+	setAttr ($mulDivide + ".input1Z") $input1Val[2];
+
+	//Create Blend Colors N Luminance Node and Assign Colors
+	$blend = `createNode blendColors`;
+	$sLum = `createNode surfaceLuminance`;
+	float $col1Value[] = `colorSliderGrp -q -rgb BrightCol`;
+	float $col2Value[] = `colorSliderGrp -q -rgb DarkCol`;
+	setAttr ($blend + ".color1") -type "double3" $col2Value[0] $col2Value[1] $col2Value[2] ;
+	setAttr ($blend + ".color2") -type "double3" $col1Value[0] $col1Value[1] $col1Value[2] ;
+
+	//Connect Attribites to Blend, Luminance N File
+	connectAttr -f ($sLum +".outValue") ($blend + ".blender");
+	connectAttr -f ($blend +".output") ($fileNode + ".colorGain");
+
+	//Loop for assigning Shader to Selected Objects
+	for ($i=0;$i<size($selObjects);$i++)
+	{
+	select -cl;
+	select -r $selObjects[$i];
+	sets -e -forceElement $shaderSG;
+	}
+	select -cl;
+	
+			}else{error "Select Path for Leaf Texture!";	}
+		}else{error "Type A Name For the Shader!";	}
+	}else{error "Select Object to assign the Leaves Shader";	}
+}
+
+global proc crAboutLSWin()
+{
+  string $aboutwindow = `window -title "Leaves Shader 1.1 " -iconName "Short Name" -s false -widthHeight 480 267 -sizeable 1 AboutLSWin`;
+  columnLayout -adjustableColumn true;
+  text -label "Leaves Shader 1.1";
+  text -label "Created by Crunk";
+  button -label "www.artbycrunk.com" -c ("showHelp -a \"mailto:artbycrunk@gmail.com\"; ");
+  text -label "";
+  text -fn "boldLabelFont" -label "This Script will Create A More Realistic Leaves Shader. \n\n1. Select the path of the Leave Texture file. \n\n 2. Type the name of New Shader.\n\n 3. Select the Bright and Dark Colors for the leaves. \n\n 4. Select the Object that u want to assign the shader \n\n 5.Click Create Shader";
+  button -label "Close" -command ("deleteUI -window " + $aboutwindow);
+  setParent ..;
+  showWindow $aboutwindow;
+}
+
+crLeavesShader;
